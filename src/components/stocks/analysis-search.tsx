@@ -14,10 +14,12 @@ export function AnalysisSearch({ initialAnalysis }: { initialAnalysis: AnalysisR
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(initialAnalysis);
   const [matches, setMatches] = useState<StockQuote[]>([]);
   const [openSuggestions, setOpenSuggestions] = useState(false);
+  const [searchActive, setSearchActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const requestIdRef = useRef(0);
   const suppressNextSuggestionRef = useRef(false);
+  const blurTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!analysis?.symbol) {
@@ -32,6 +34,11 @@ export function AnalysisSearch({ initialAnalysis }: { initialAnalysis: AnalysisR
   }, [analysis?.symbol]);
 
   useEffect(() => {
+    if (!searchActive) {
+      setOpenSuggestions(false);
+      return;
+    }
+
     if (!query.trim()) {
       setMatches([]);
       setOpenSuggestions(false);
@@ -57,12 +64,12 @@ export function AnalysisSearch({ initialAnalysis }: { initialAnalysis: AnalysisR
         suppressNextSuggestionRef.current = false;
         setOpenSuggestions(false);
       } else {
-        setOpenSuggestions(true);
+        setOpenSuggestions(result.length > 0);
       }
     }, 180);
 
     return () => window.clearTimeout(timeoutId);
-  }, [query]);
+  }, [query, searchActive]);
 
   async function runAnalysis(symbol: string, silent = false) {
     if (!silent) {
@@ -95,6 +102,7 @@ export function AnalysisSearch({ initialAnalysis }: { initialAnalysis: AnalysisR
       suppressNextSuggestionRef.current = true;
       setQuery(symbol);
       setOpenSuggestions(false);
+      setSearchActive(false);
     } catch {
       setAnalysis(null);
       setError("Unable to analyze this share right now.");
@@ -118,6 +126,23 @@ export function AnalysisSearch({ initialAnalysis }: { initialAnalysis: AnalysisR
     await runAnalysis(selected.symbol);
   }
 
+  function handleFocus() {
+    if (blurTimeoutRef.current) {
+      window.clearTimeout(blurTimeoutRef.current);
+      blurTimeoutRef.current = null;
+    }
+
+    setSearchActive(true);
+    setOpenSuggestions(matches.length > 0);
+  }
+
+  function handleBlur() {
+    blurTimeoutRef.current = window.setTimeout(() => {
+      setOpenSuggestions(false);
+      setSearchActive(false);
+    }, 120);
+  }
+
   return (
     <div className="space-y-4">
       <Card className={openSuggestions ? "relative z-50 overflow-visible" : "relative overflow-visible"}>
@@ -127,8 +152,12 @@ export function AnalysisSearch({ initialAnalysis }: { initialAnalysis: AnalysisR
             <Input
               className="pl-10"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onFocus={() => setOpenSuggestions(matches.length > 0)}
+              onChange={(event) => {
+                setSearchActive(true);
+                setQuery(event.target.value);
+              }}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
               placeholder="Search by NEPSE symbol or company name"
             />
             {openSuggestions && matches.length ? (
