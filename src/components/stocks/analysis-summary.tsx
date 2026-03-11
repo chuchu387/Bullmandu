@@ -34,6 +34,23 @@ export function AnalysisSummary({
           <Metric label="Rupee Move" value={`${positive ? "+" : ""}${formatCurrency(analysis.rupeeMove)}`} />
           <Metric label="Expected Change" value={formatPercent(analysis.percentageMove)} />
         </div>
+        <div className="grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-3">
+          <CompactMetric
+            label="Target Date"
+            value={analysis.estimatedTargetDate ?? "Scenario-based"}
+            helper="Projected window"
+          />
+          <CompactMetric
+            label="Confidence"
+            value={`${analysis.confidence.toFixed(0)}%`}
+            helper={`${analysis.backtest.horizonDays}-day model`}
+          />
+          <CompactMetric
+            label="Backtest Accuracy"
+            value={`${analysis.backtest.directionalAccuracy.toFixed(0)}%`}
+            helper={`${analysis.backtest.meanAbsoluteErrorPercent.toFixed(2)}% avg error`}
+          />
+        </div>
       </Card>
 
       <Card className="space-y-4">
@@ -50,6 +67,24 @@ export function AnalysisSummary({
         />
         <Metric label="Risk Note" value={analysis.riskNote} compact />
       </Card>
+    </div>
+  );
+}
+
+function CompactMetric({
+  label,
+  value,
+  helper
+}: {
+  label: string;
+  value: string;
+  helper: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+      <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-2 text-base font-semibold text-ink">{value}</p>
+      <p className="mt-1 text-xs text-slate-500">{helper}</p>
     </div>
   );
 }
