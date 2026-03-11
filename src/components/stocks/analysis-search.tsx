@@ -70,24 +70,38 @@ export function AnalysisSearch({ initialAnalysis }: { initialAnalysis: AnalysisR
       setError(null);
     }
 
-    const response = await fetch(`/api/analysis/${symbol}`);
-    const data = await response.json();
+    try {
+      const response = await fetch(`/api/analysis/${encodeURIComponent(symbol)}`);
+      const raw = await response.text();
+      const data = raw ? (JSON.parse(raw) as AnalysisResult | { error?: string }) : null;
 
-    if (!response.ok) {
+      if (!response.ok) {
+        setAnalysis(null);
+        setError(
+          data && typeof data === "object" && "error" in data && data.error
+            ? data.error
+            : "Unable to analyze this share right now."
+        );
+        return;
+      }
+
+      if (!data || !("symbol" in data)) {
+        setAnalysis(null);
+        setError("Analysis response was incomplete.");
+        return;
+      }
+
+      setAnalysis(data);
+      suppressNextSuggestionRef.current = true;
+      setQuery(symbol);
+      setOpenSuggestions(false);
+    } catch {
       setAnalysis(null);
-      setError(data.error ?? "Stock not found");
+      setError("Unable to analyze this share right now.");
+    } finally {
       if (!silent) {
         setPending(false);
       }
-      return;
-    }
-
-    setAnalysis(data);
-    suppressNextSuggestionRef.current = true;
-    setQuery(symbol);
-    setOpenSuggestions(false);
-    if (!silent) {
-      setPending(false);
     }
   }
 

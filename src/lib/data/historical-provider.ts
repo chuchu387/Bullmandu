@@ -11,6 +11,7 @@ type CacheEntry = {
 };
 
 const cache = new Map<string, CacheEntry>();
+const inflight = new Map<string, Promise<PricePoint[]>>();
 const TTL_MS = 1000 * 60 * 15;
 
 type PythonHistoryPoint = {
@@ -27,25 +28,39 @@ export async function getRealHistory(symbol: string, days = 365) {
     return cached.history;
   }
 
+  const pending = inflight.get(key);
+  if (pending) {
+    return pending;
+  }
+
   const scriptPath = path.join(process.cwd(), "scripts", "nepse_history.py");
-  const { stdout } = await execFileAsync("python", [scriptPath, symbol, String(days)], {
+  const task = execFileAsync("python", [scriptPath, symbol, String(days)], {
     windowsHide: true,
     maxBuffer: 1024 * 1024 * 4
+  }).then(({ stdout }) => {
+    const parsed = JSON.parse(stdout) as PythonHistoryPoint[];
+    const history = parsed
+      .filter((point) => point.date && Number(point.close) > 0)
+      .map((point) => ({
+        date: point.date,
+        close: Number(point.close),
+        volume: Number(point.volume ?? 0)
+      }));
+
+    cache.set(key, {
+      fetchedAt: Date.now(),
+      history
+    });
+    inflight.delete(key);
+    return history;
   });
 
-  const parsed = JSON.parse(stdout) as PythonHistoryPoint[];
-  const history = parsed
-    .filter((point) => point.date && Number(point.close) > 0)
-    .map((point) => ({
-      date: point.date,
-      close: Number(point.close),
-      volume: Number(point.volume ?? 0)
-    }));
+  inflight.set(key, task);
 
-  cache.set(key, {
-    fetchedAt: Date.now(),
-    history
-  });
-
-  return history;
+  try {
+    return await task;
+  } catch (error) {
+    inflight.delete(key);
+    throw error;
+  }
 }

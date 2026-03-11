@@ -22,6 +22,11 @@ const cache: CacheState = {
 
 const TTL_MS = 1000 * 60 * 2;
 const BASELINE_MAP = new Map(MOCK_STOCKS.map((stock) => [stock.symbol, stock.currentPrice]));
+const persistState = {
+  key: "",
+  result: null as Awaited<ReturnType<MarketDataBot["persistCurrentSnapshots"]>> | null,
+  pending: null as Promise<{ saved: number; tradingDay: string; bucketLabel: string }> | null
+};
 
 function isReasonableQuote(symbol: string, quote: LiveQuote) {
   if (quote.currentPrice <= 0 || quote.previousClose <= 0) {
@@ -179,47 +184,72 @@ export class MarketDataBot {
   }
 
   async persistCurrentSnapshots() {
-    if (!isWithinLiveTradingWindow()) {
-      return { saved: 0, tradingDay: getTradingDay(), bucketLabel: getFiveMinuteBucket() };
-    }
-
-    const state = await this.scrapeAll(true);
     const tradingDay = getTradingDay();
     const bucketLabel = getFiveMinuteBucket();
-    let saved = 0;
+    const persistKey = `${tradingDay}:${bucketLabel}`;
 
-    for (const [symbol, quotes] of state.quoteSeries.entries()) {
-      const best = chooseBestQuote(quotes);
-      await db.livePriceSnapshot.upsert({
-        where: {
-          symbol_tradingDay_bucketLabel_source: {
+    if (!isWithinLiveTradingWindow()) {
+      return { saved: 0, tradingDay, bucketLabel };
+    }
+
+    if (persistState.key === persistKey && persistState.result) {
+      return persistState.result;
+    }
+
+    if (persistState.key === persistKey && persistState.pending) {
+      return persistState.pending;
+    }
+
+    persistState.key = persistKey;
+
+    const task = (async () => {
+      const state = await this.scrapeAll(true);
+      let saved = 0;
+
+      for (const [symbol, quotes] of state.quoteSeries.entries()) {
+        const best = chooseBestQuote(quotes);
+        await db.livePriceSnapshot.upsert({
+          where: {
+            symbol_tradingDay_bucketLabel_source: {
+              symbol,
+              tradingDay,
+              bucketLabel,
+              source: best.source
+            }
+          },
+          update: {
+            price: best.currentPrice,
+            previousClose: best.previousClose,
+            volume: best.volume,
+            capturedAt: new Date()
+          },
+          create: {
             symbol,
             tradingDay,
             bucketLabel,
-            source: best.source
+            source: best.source,
+            price: best.currentPrice,
+            previousClose: best.previousClose,
+            volume: best.volume,
+            capturedAt: new Date()
           }
-        },
-        update: {
-          price: best.currentPrice,
-          previousClose: best.previousClose,
-          volume: best.volume,
-          capturedAt: new Date()
-        },
-        create: {
-          symbol,
-          tradingDay,
-          bucketLabel,
-          source: best.source,
-          price: best.currentPrice,
-          previousClose: best.previousClose,
-          volume: best.volume,
-          capturedAt: new Date()
-        }
-      });
-      saved += 1;
-    }
+        });
+        saved += 1;
+      }
 
-    return { saved, tradingDay, bucketLabel };
+      const result = { saved, tradingDay, bucketLabel };
+      persistState.result = result;
+      persistState.pending = null;
+      return result;
+    })().catch((error) => {
+      persistState.pending = null;
+      persistState.result = null;
+      persistState.key = "";
+      throw error;
+    });
+
+    persistState.pending = task;
+    return task;
   }
 
   async enrichStocks(stocks: StockQuote[]) {

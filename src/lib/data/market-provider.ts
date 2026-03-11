@@ -5,8 +5,56 @@ import { getOfficialSecurities, getOfficialTodayPrices } from "@/lib/data/offici
 import { MOCK_STOCKS } from "@/lib/data/mock-market";
 import type { AnalysisResult, MarketSummary, StockQuote } from "@/types";
 
+type StockListCache = {
+  fetchedAt: number;
+  stocks: StockQuote[];
+};
+
+type AnalysisCache = {
+  fetchedAt: number;
+  analysis: AnalysisResult | null;
+};
+
+type SummaryCache = {
+  fetchedAt: number;
+  summary: MarketSummary;
+};
+
+let stockListCache: StockListCache | null = null;
+const analysisCache = new Map<string, AnalysisCache>();
+let summaryCache: SummaryCache | null = null;
+const listInflight = new Map<string, Promise<StockQuote[]>>();
+const analysisInflight = new Map<string, Promise<AnalysisResult | null>>();
+let summaryInflight: Promise<MarketSummary> | null = null;
+
 export class MarketDataProvider {
   async listStocks() {
+    if (stockListCache && Date.now() - stockListCache.fetchedAt < 1000 * 60 * 2) {
+      return stockListCache.stocks;
+    }
+
+    const pending = listInflight.get("stocks");
+    if (pending) {
+      return pending;
+    }
+
+    const task = this.fetchStocks();
+    listInflight.set("stocks", task);
+    try {
+      const stocks = await task;
+      stockListCache = {
+        fetchedAt: Date.now(),
+        stocks
+      };
+      listInflight.delete("stocks");
+      return stocks;
+    } catch (error) {
+      listInflight.delete("stocks");
+      throw error;
+    }
+  }
+
+  private async fetchStocks() {
     try {
       const [securities, todayPrices] = await Promise.all([
         getOfficialSecurities(),
@@ -74,6 +122,35 @@ export class MarketDataProvider {
   }
 
   async getAnalysis(symbol: string): Promise<AnalysisResult | null> {
+    const normalizedSymbol = symbol.toUpperCase();
+    const cached = analysisCache.get(normalizedSymbol);
+    if (cached && Date.now() - cached.fetchedAt < 1000 * 60) {
+      return cached.analysis;
+    }
+
+    const pending = analysisInflight.get(normalizedSymbol);
+    if (pending) {
+      return pending;
+    }
+
+    const task = this.buildAnalysis(normalizedSymbol);
+    analysisInflight.set(normalizedSymbol, task);
+
+    try {
+      const analysis = await task;
+      analysisCache.set(normalizedSymbol, {
+        fetchedAt: Date.now(),
+        analysis
+      });
+      analysisInflight.delete(normalizedSymbol);
+      return analysis;
+    } catch (error) {
+      analysisInflight.delete(normalizedSymbol);
+      throw error;
+    }
+  }
+
+  private async buildAnalysis(symbol: string): Promise<AnalysisResult | null> {
     await marketDataBot.persistCurrentSnapshots();
     const stock = await this.resolveStock(symbol);
     if (!stock) {
@@ -127,6 +204,30 @@ export class MarketDataProvider {
   }
 
   async getMarketSummary(): Promise<MarketSummary> {
+    if (summaryCache && Date.now() - summaryCache.fetchedAt < 1000 * 60) {
+      return summaryCache.summary;
+    }
+
+    if (summaryInflight) {
+      return summaryInflight;
+    }
+
+    summaryInflight = this.buildMarketSummary();
+    try {
+      const summary = await summaryInflight;
+      summaryCache = {
+        fetchedAt: Date.now(),
+        summary
+      };
+      summaryInflight = null;
+      return summary;
+    } catch (error) {
+      summaryInflight = null;
+      throw error;
+    }
+  }
+
+  private async buildMarketSummary(): Promise<MarketSummary> {
     const liveStocks = (await this.listStocks()).filter(
       (stock) => stock.currentPrice > 0 && stock.previousClose > 0
     );

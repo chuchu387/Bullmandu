@@ -10,25 +10,54 @@ type CacheEntry<T> = {
 };
 
 const cache = new Map<string, CacheEntry<unknown>>();
+const inflight = new Map<string, Promise<unknown>>();
+
+function getTtlMs(args: string[]) {
+  if (args[0] === "securities") {
+    return 1000 * 60 * 60 * 12;
+  }
+
+  if (args[0] === "today") {
+    return 1000 * 60 * 2;
+  }
+
+  return 1000 * 60 * 5;
+}
 
 async function runPython<T>(args: string[]) {
   const key = args.join(":");
   const cached = cache.get(key);
-  if (cached && Date.now() - cached.fetchedAt < 1000 * 60 * 5) {
+  if (cached && Date.now() - cached.fetchedAt < getTtlMs(args)) {
     return cached.value as T;
   }
 
+  const pending = inflight.get(key);
+  if (pending) {
+    return pending as T;
+  }
+
   const scriptPath = path.join(process.cwd(), "scripts", "nepse_market.py");
-  const { stdout } = await execFileAsync("python", [scriptPath, ...args], {
+  const task = execFileAsync("python", [scriptPath, ...args], {
     windowsHide: true,
     maxBuffer: 1024 * 1024 * 8
+  }).then(({ stdout }) => {
+    const parsed = JSON.parse(stdout) as T;
+    cache.set(key, {
+      fetchedAt: Date.now(),
+      value: parsed
+    });
+    inflight.delete(key);
+    return parsed;
   });
-  const parsed = JSON.parse(stdout) as T;
-  cache.set(key, {
-    fetchedAt: Date.now(),
-    value: parsed
-  });
-  return parsed;
+
+  inflight.set(key, task);
+
+  try {
+    return await task;
+  } catch (error) {
+    inflight.delete(key);
+    throw error;
+  }
 }
 
 export type OfficialSecurity = {
