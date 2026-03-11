@@ -18,4 +18,23 @@ describe("analysis engine", () => {
     expect(estimateTimeframe(7, 0.9, 10).label).toBe("2 weeks");
     expect(estimateTimeframe(12, 0.5, 18).label).toBe("3 months");
   });
+
+  it("keeps finite outputs for sparse or dirty histories", () => {
+    const result = analyzeStock({
+      symbol: "RSML",
+      companyName: "Reliance Spinning Mills Limited",
+      sector: "Manufacturing",
+      currentPrice: 812.1,
+      previousClose: 810,
+      volume: 1200,
+      history: []
+    });
+
+    expect(Number.isFinite(result.predictedPrice)).toBe(true);
+    expect(Number.isFinite(result.rupeeMove)).toBe(true);
+    expect(Number.isFinite(result.percentageMove)).toBe(true);
+    expect(Number.isFinite(result.indicators.support)).toBe(true);
+    expect(Number.isFinite(result.indicators.resistance)).toBe(true);
+    expect(result.riskNote.includes("Infinity")).toBe(false);
+  });
 });

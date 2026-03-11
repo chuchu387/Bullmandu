@@ -17,6 +17,47 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function finiteOr(value: number, fallback: number) {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function roundFinite(value: number, fallback: number, digits = 2) {
+  const safeValue = finiteOr(value, fallback);
+  return Number(safeValue.toFixed(digits));
+}
+
+function buildStableHistory(stock: StockQuote) {
+  const safePreviousClose =
+    Number.isFinite(stock.previousClose) && stock.previousClose > 0
+      ? stock.previousClose
+      : stock.currentPrice > 0
+        ? stock.currentPrice
+        : 1;
+  const safeCurrentPrice =
+    Number.isFinite(stock.currentPrice) && stock.currentPrice > 0 ? stock.currentPrice : safePreviousClose;
+
+  const cleaned = stock.history
+    .filter((point) => Number.isFinite(point.close) && point.close > 0)
+    .map((point) => ({
+      ...point,
+      close: point.close,
+      volume: Number.isFinite(point.volume) && point.volume >= 0 ? point.volume : 0
+    }));
+
+  if (cleaned.length >= 30) {
+    return cleaned;
+  }
+
+  const seedPrice = cleaned.at(-1)?.close ?? safePreviousClose;
+  const filler = Array.from({ length: Math.max(30 - cleaned.length, 0) }, (_, index) => ({
+    date: `synthetic-${index + 1}`,
+    close: seedPrice,
+    volume: 0
+  }));
+
+  return [...filler, ...cleaned, { date: "synthetic-current", close: safeCurrentPrice, volume: stock.volume }];
+}
+
 function buildRecommendation(score: number): Recommendation {
   if (score >= 75) return "Strong Buy";
   if (score >= 60) return "Buy";
@@ -55,11 +96,13 @@ function predictionCurve(lastPrice: number, targetPrice: number, days: number) {
 }
 
 export function analyzeStock(stock: StockQuote): AnalysisResult {
-  const closes = stock.history.map((point) => point.close);
-  const volumes = stock.history.map((point) => point.volume);
-  const currentPrice = stock.currentPrice;
-  const dailyChange = currentPrice - stock.previousClose;
-  const dailyChangePercent = stock.previousClose === 0 ? 0 : (dailyChange / stock.previousClose) * 100;
+  const stableHistory = buildStableHistory(stock);
+  const closes = stableHistory.map((point) => point.close);
+  const volumes = stableHistory.map((point) => point.volume);
+  const currentPrice = finiteOr(stock.currentPrice, closes.at(-1) ?? 0);
+  const previousClose = finiteOr(stock.previousClose, currentPrice);
+  const dailyChange = currentPrice - previousClose;
+  const dailyChangePercent = previousClose === 0 ? 0 : (dailyChange / previousClose) * 100;
   const sma20 = sma(closes, 20);
   const sma50 = sma(closes, 50);
   const ema12 = ema(closes, 12);
@@ -72,6 +115,8 @@ export function analyzeStock(stock: StockQuote): AnalysisResult {
   const volatilityValue = volatility(closes, 20);
   const trendSlope = linearRegressionSlope(closes.slice(-20));
   const volumeTrendValue = volumeTrend(volumes);
+  const safeSupport = finiteOr(levels.support, Math.min(currentPrice, previousClose));
+  const safeResistance = finiteOr(levels.resistance, Math.max(currentPrice, previousClose));
 
   let score = 50;
   score += currentPrice > sma20 ? 8 : -8;
@@ -88,26 +133,28 @@ export function analyzeStock(stock: StockQuote): AnalysisResult {
   const recommendation = buildRecommendation(clamp(score, 0, 100));
   const baseProjection = currentPrice + trendSlope * 8 + momentumValue * 0.35;
   const regressionProjection = currentPrice + trendSlope * 15;
-  const resistanceAdjusted = Math.min(regressionProjection, levels.resistance * 1.04);
-  const supportAdjusted = Math.max(baseProjection, levels.support * 0.97);
-  const predictedPrice = Number(
+  const resistanceAdjusted = Math.min(regressionProjection, safeResistance * 1.04);
+  const supportAdjusted = Math.max(baseProjection, safeSupport * 0.97);
+  const predictedPrice = roundFinite(
     (
       resistanceAdjusted * 0.4 +
       supportAdjusted * 0.3 +
       (currentPrice + (ema12 - ema26) * 4) * 0.3
-    ).toFixed(2)
+    ),
+    currentPrice
   );
-  const rupeeMove = Number((predictedPrice - currentPrice).toFixed(2));
-  const percentageMove = Number(((rupeeMove / currentPrice) * 100).toFixed(2));
+  const rupeeMove = roundFinite(predictedPrice - currentPrice, 0);
+  const percentageMove = roundFinite(currentPrice === 0 ? 0 : (rupeeMove / currentPrice) * 100, 0);
   const confidence = clamp(
-    Number(
+    roundFinite(
       (
         62 +
         (trendSlope > 0 ? 6 : -4) +
         (Math.abs(macdSet.histogram) > 2 ? 5 : 0) -
         volatilityValue * 0.45 +
         volumeTrendValue * 100 * 0.1
-      ).toFixed(2)
+      ),
+      55
     ),
     35,
     91
@@ -118,9 +165,9 @@ export function analyzeStock(stock: StockQuote): AnalysisResult {
   const riskLabel =
     volatilityValue > 18
       ? "High volatility may delay the target and trigger sharp swings."
-      : currentPrice >= levels.resistance * 0.98
-        ? `Resistance near Rs. ${levels.resistance.toFixed(2)} may slow follow-through.`
-        : `Support near Rs. ${levels.support.toFixed(2)} offers some downside reference, but trends can reverse quickly.`;
+      : currentPrice >= safeResistance * 0.98
+        ? `Resistance near Rs. ${safeResistance.toFixed(2)} may slow follow-through.`
+        : `Support near Rs. ${safeSupport.toFixed(2)} offers some downside reference, but trends can reverse quickly.`;
 
   const simpleExplanation = `${stock.symbol} looks ${recommendation.toLowerCase()} because price is ${currentPrice > sma20 ? "above" : "below"} key moving averages, RSI is ${rsi14.toFixed(0)}, and momentum is ${momentumValue >= 0 ? "improving" : "weakening"}.`;
   const advancedExplanation = [
@@ -134,27 +181,27 @@ export function analyzeStock(stock: StockQuote): AnalysisResult {
     companyName: stock.companyName,
     sector: stock.sector,
     currentPrice,
-    dailyChange: Number(dailyChange.toFixed(2)),
-    dailyChangePercent: Number(dailyChangePercent.toFixed(2)),
-    volume: stock.volume,
+    dailyChange: roundFinite(dailyChange, 0),
+    dailyChangePercent: roundFinite(dailyChangePercent, 0),
+    volume: finiteOr(stock.volume, 0),
     indicators: {
-      sma20: Number(sma20.toFixed(2)),
-      sma50: Number(sma50.toFixed(2)),
-      ema12: Number(ema12.toFixed(2)),
-      ema26: Number(ema26.toFixed(2)),
-      rsi14: Number(rsi14.toFixed(2)),
-      macd: Number(macdSet.macd.toFixed(2)),
-      signal: Number(macdSet.signal.toFixed(2)),
-      histogram: Number(macdSet.histogram.toFixed(2)),
-      bollingerUpper: Number(bands.upper.toFixed(2)),
-      bollingerMiddle: Number(bands.middle.toFixed(2)),
-      bollingerLower: Number(bands.lower.toFixed(2)),
-      support: Number(levels.support.toFixed(2)),
-      resistance: Number(levels.resistance.toFixed(2)),
-      momentum: Number(momentumValue.toFixed(2)),
-      volatility: Number(volatilityValue.toFixed(2)),
-      trendSlope: Number(trendSlope.toFixed(3)),
-      volumeTrend: Number((volumeTrendValue * 100).toFixed(2))
+      sma20: roundFinite(sma20, currentPrice),
+      sma50: roundFinite(sma50, currentPrice),
+      ema12: roundFinite(ema12, currentPrice),
+      ema26: roundFinite(ema26, currentPrice),
+      rsi14: roundFinite(rsi14, 50),
+      macd: roundFinite(macdSet.macd, 0),
+      signal: roundFinite(macdSet.signal, 0),
+      histogram: roundFinite(macdSet.histogram, 0),
+      bollingerUpper: roundFinite(bands.upper, currentPrice),
+      bollingerMiddle: roundFinite(bands.middle, currentPrice),
+      bollingerLower: roundFinite(bands.lower, currentPrice),
+      support: roundFinite(safeSupport, currentPrice),
+      resistance: roundFinite(safeResistance, currentPrice),
+      momentum: roundFinite(momentumValue, 0),
+      volatility: roundFinite(volatilityValue, 0),
+      trendSlope: roundFinite(trendSlope, 0, 3),
+      volumeTrend: roundFinite(volumeTrendValue * 100, 0)
     },
     recommendation,
     confidence,
@@ -166,7 +213,7 @@ export function analyzeStock(stock: StockQuote): AnalysisResult {
     simpleExplanation,
     advancedExplanation,
     riskNote: riskLabel,
-    historicalChart: stock.history,
+    historicalChart: stableHistory,
     predictionChart,
     liveChart: [],
     liveSources: []

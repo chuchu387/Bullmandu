@@ -4,6 +4,16 @@ import { getSession } from "@/lib/auth/session";
 import { marketDataProvider } from "@/lib/data/market-provider";
 import { symbolSchema } from "@/lib/validations/stocks";
 
+function isFiniteAnalysis(analysis: NonNullable<Awaited<ReturnType<typeof marketDataProvider.getAnalysis>>>) {
+  return [
+    analysis.currentPrice,
+    analysis.predictedPrice,
+    analysis.percentageMove,
+    analysis.rupeeMove,
+    analysis.confidence
+  ].every((value) => Number.isFinite(value));
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ symbol: string }> }
@@ -17,7 +27,7 @@ export async function GET(
     }
 
     const session = await getSession();
-    if (session?.sub) {
+    if (session?.sub && isFiniteAnalysis(analysis)) {
       await db.analysisHistory.create({
         data: {
           userId: session.sub,
