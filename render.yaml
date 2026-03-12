@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: shareanalysis-app
+    env: node
+    plan: starter
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma db push && npm run seed && npx next start -H 0.0.0.0 -p $PORT
+    healthCheckPath: /login
+    envVars:
+      - key: DATABASE_URL
+        value: file:./data/prod.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: SEED_DEMO_USER_EMAIL
+        value: demo@shareanalysis.app
+      - key: SEED_DEMO_USER_PASSWORD
+        value: DemoPass123!
+    disk:
+      name: shareanalysis-data
+      mountPath: /opt/render/project/src/prisma/data
+      sizeGB: 1

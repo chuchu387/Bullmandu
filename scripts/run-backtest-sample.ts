@@ -15,8 +15,31 @@ const sectors: Record<string, string> = {
   NIFRA: "Investment"
 };
 
+type BacktestRow = {
+  symbol: string;
+  sampleSize: number;
+  directionalAccuracy: number | null;
+  meanAbsoluteErrorPercent: number | null;
+  biasPercent?: number | null;
+  confidence: number | null;
+  recommendation?: string;
+  note?: string;
+};
+
+type BacktestSummaryRow = BacktestRow & {
+  directionalAccuracy: number;
+  meanAbsoluteErrorPercent: number;
+};
+
+function hasBacktestMetrics(row: BacktestRow): row is BacktestSummaryRow {
+  return (
+    typeof row.directionalAccuracy === "number" &&
+    typeof row.meanAbsoluteErrorPercent === "number"
+  );
+}
+
 async function main() {
-  const rows = [];
+  const rows: BacktestRow[] = [];
 
   for (const symbol of symbols) {
     const history = await getRealHistory(symbol, 420);
@@ -53,10 +76,7 @@ async function main() {
     });
   }
 
-  const valid = rows.filter(
-    (row): row is Extract<(typeof rows)[number], { directionalAccuracy: number; meanAbsoluteErrorPercent: number }> =>
-      typeof row.directionalAccuracy === "number" && typeof row.meanAbsoluteErrorPercent === "number"
-  );
+  const valid = rows.filter(hasBacktestMetrics);
 
   const summary = valid.length
     ? {

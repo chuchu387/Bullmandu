@@ -1,6 +1,6 @@
 # ShareAnalysis
 
-ShareAnalysis is a production-oriented NEPSE stock analysis platform built with Next.js, TypeScript, Tailwind CSS, Prisma, PostgreSQL, and a mock-friendly market data abstraction layer.
+ShareAnalysis is a production-oriented NEPSE stock analysis platform built with Next.js, TypeScript, Tailwind CSS, Prisma, SQLite, and a mock-friendly market data abstraction layer.
 
 This analysis is for educational and informational purposes only and should not be treated as guaranteed investment advice.
 
@@ -9,7 +9,7 @@ This analysis is for educational and informational purposes only and should not 
 - Secure register/login flow with signed JWT session cookies and bcrypt password hashing
 - Dashboard with top gainers, top losers, trending stocks, recent analyses, recommendation distribution, and watchlist summary
 - NEPSE stock analysis page with historical chart, future prediction chart, technical indicators, timeframe estimate, target price, rupee move, risk note, and clear explanations
-- Watchlist and prediction history backed by PostgreSQL through Prisma
+- Watchlist and prediction history backed by SQLite through Prisma
 - Market data provider abstraction designed for future NEPSE API integration
 - Unit, API, auth, and UI smoke tests with Vitest and React Testing Library
 
@@ -18,7 +18,7 @@ This analysis is for educational and informational purposes only and should not 
 - Next.js App Router
 - TypeScript
 - Tailwind CSS
-- PostgreSQL
+- SQLite
 - Prisma ORM
 - Custom JWT auth with `jose`
 - Recharts
@@ -91,7 +91,7 @@ shareanalysis-app/
 Create `.env` from `.env.example`.
 
 ```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/shareanalysis?schema=public"
+DATABASE_URL="file:./dev.db"
 JWT_SECRET="replace-with-a-long-random-string"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 SEED_DEMO_USER_EMAIL="demo@shareanalysis.app"
@@ -106,21 +106,19 @@ SEED_DEMO_USER_PASSWORD="DemoPass123!"
 npm install
 ```
 
-2. Create a PostgreSQL database named `shareanalysis`.
-
-3. Apply the Prisma schema:
+2. Apply the Prisma schema:
 
 ```bash
 npx prisma db push
 ```
 
-4. Seed demo data:
+3. Seed demo data:
 
 ```bash
 npm run seed
 ```
 
-5. Start development:
+4. Start development:
 
 ```bash
 npm run dev
@@ -146,28 +144,41 @@ npm test
 
 ## Deployment
 
-Vercel-friendly deployment steps:
+This repository is configured for Render because it currently uses SQLite. A ready-to-use [render.yaml](./render.yaml) is included.
+
+### Render requirements
 
 1. Push the repository to GitHub.
-2. Create a managed PostgreSQL database.
-3. Add `DATABASE_URL`, `JWT_SECRET`, and `NEXT_PUBLIC_APP_URL` to Vercel environment variables.
-4. Set the build command to:
+2. Create a new Render Web Service from this repository.
+3. Use the included blueprint or match these settings manually:
 
-```bash
-npm run build
+```yaml
+buildCommand: npm install && npx prisma generate && npm run build
+startCommand: npx prisma db push && npm run seed && npx next start -H 0.0.0.0 -p $PORT
+healthCheckPath: /login
 ```
 
-5. Set the install command to:
+4. Add a persistent disk mounted at:
 
-```bash
-npm install
+```text
+/opt/render/project/src/prisma/data
 ```
 
-6. Run Prisma schema sync once per environment:
+5. Set these environment variables:
 
-```bash
-npx prisma db push
+```env
+DATABASE_URL="file:./data/prod.db"
+JWT_SECRET="<long-random-secret>"
+NEXT_PUBLIC_APP_URL="https://your-service-name.onrender.com"
+SEED_DEMO_USER_EMAIL="demo@shareanalysis.app"
+SEED_DEMO_USER_PASSWORD="DemoPass123!"
 ```
+
+### Why Render
+
+- SQLite needs persistent filesystem storage.
+- Render supports persistent disks for Node services.
+- Vercel is not a good fit for this repository unless the database is migrated away from SQLite.
 
 ## Assumptions
 

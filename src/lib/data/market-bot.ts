@@ -12,6 +12,12 @@ type CacheState = {
   errors: string[];
 };
 
+type PersistSnapshotsResult = {
+  saved: number;
+  tradingDay: string;
+  bucketLabel: string;
+};
+
 const cache: CacheState = {
   fetchedAt: 0,
   quotes: new Map(),
@@ -24,8 +30,8 @@ const TTL_MS = 1000 * 60 * 2;
 const BASELINE_MAP = new Map(MOCK_STOCKS.map((stock) => [stock.symbol, stock.currentPrice]));
 const persistState = {
   key: "",
-  result: null as Awaited<ReturnType<MarketDataBot["persistCurrentSnapshots"]>> | null,
-  pending: null as Promise<{ saved: number; tradingDay: string; bucketLabel: string }> | null
+  result: null as PersistSnapshotsResult | null,
+  pending: null as Promise<PersistSnapshotsResult> | null
 };
 
 function isReasonableQuote(symbol: string, quote: LiveQuote) {

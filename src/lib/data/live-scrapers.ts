@@ -3,7 +3,7 @@ import { NEPSE_UNIVERSE } from "@/lib/data/nepse-universe";
 import type { LiveQuote } from "@/types";
 
 type QuoteMap = Map<string, LiveQuote>;
-const KNOWN_SYMBOLS = new Set(NEPSE_UNIVERSE.map((item) => item.symbol));
+const KNOWN_SYMBOLS: Set<string> = new Set(NEPSE_UNIVERSE.map((item) => item.symbol));
 
 export type LiveScraper = {
   name: string;
