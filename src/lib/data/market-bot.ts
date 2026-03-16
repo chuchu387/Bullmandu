@@ -102,7 +102,7 @@ function mergeQuotes(target: Map<string, LiveQuote[]>, incoming: Map<string, Liv
 }
 
 export class MarketDataBot {
-  private scrapers = [liveNepseScraper, shareSansarScraper, chukulScraper];
+  private scrapers = [shareSansarScraper, liveNepseScraper, chukulScraper]; // sharesansar first for accuracy
 
   async scrapeAll(force = false) {
     const now = Date.now();

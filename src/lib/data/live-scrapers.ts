@@ -157,12 +157,12 @@ function parseLivenepseTable(html: string, source: string) {
 
 function parseShareSansarTable(html: string, source: string) {
   return parseTableByHeaders(html, source, {
-    symbol: ["symbol"],
-    currentPrice: ["ltp", "close"],
-    rawChange: ["pointchange", "ch"],
-    rawChangePercent: ["percentagechange", "changepercent"],
-    volume: ["volume", "vol"],
-    previousClose: ["prevclose", "previousclose", "close"]
+    symbol: ["symbol", "security"],
+    currentPrice: ["ltp", "lastprice", "lasttradedprice", "close"],
+    rawChange: ["pointchange", "change", "ch", "+/-"],
+    rawChangePercent: ["percentagechange", "changepercent", "%change", "+/-%"],
+    volume: ["volume", "vol", "tradedvolume"],
+    previousClose: ["prevclose", "previousclose", "pclose"]
   });
 }
 
