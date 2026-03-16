@@ -53,7 +53,8 @@ export function isWithinLiveTradingWindow(date = new Date()) {
   }
 
   const minutes = kathmandu.getHours() * 60 + kathmandu.getMinutes();
-  return minutes >= 11 * 60 && minutes <= 15 * 60;
+  // Extended trading window: 10:00 AM - 5:00 PM Kathmandu time
+  return minutes >= 10 * 60 && minutes <= 17 * 60;
 }
 
 export function buildIntradayBuckets() {

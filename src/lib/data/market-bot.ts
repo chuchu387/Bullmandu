@@ -26,7 +26,7 @@ const cache: CacheState = {
   errors: []
 };
 
-const TTL_MS = 1000 * 60 * 2;
+const TTL_MS = 1000 * 30; // 30 seconds cache for fresher data
 const BASELINE_MAP = new Map(MOCK_STOCKS.map((stock) => [stock.symbol, stock.currentPrice]));
 const persistState = {
   key: "",
