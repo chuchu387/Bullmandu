@@ -113,7 +113,9 @@ function parseTableByHeaders(html: string, source: string, headerAliases: Record
       }
 
       const rawSymbol = cells[indexMap.symbol];
-      const symbol = normalizeSymbol(rawSymbol ?? "");
+      // EXACT match only - no prefix/suffix matching to avoid NIMB matching NIMBD90
+      const symbol = rawSymbol ? rawSymbol.trim().toUpperCase().replace(/[^A-Z]/g, "") : "";
+      
       if (!KNOWN_SYMBOLS.has(symbol)) {
         return;
       }
