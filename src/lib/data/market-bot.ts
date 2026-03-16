@@ -41,7 +41,8 @@ function isReasonableQuote(symbol: string, quote: LiveQuote) {
 
   const baseline = BASELINE_MAP.get(symbol);
   if (!baseline) {
-    return Math.abs(quote.currentPrice - quote.previousClose) / quote.previousClose <= 0.2;
+    // No baseline - accept if change is within 30% (more lenient for after-hours)
+    return Math.abs(quote.currentPrice - quote.previousClose) / quote.previousClose <= 0.3;
   }
 
   const ratio = quote.currentPrice / baseline;
@@ -52,12 +53,13 @@ function isReasonableQuote(symbol: string, quote: LiveQuote) {
     return false;
   }
 
+  // More lenient thresholds to accept real market prices
   return (
-    ratio >= 0.55 &&
-    ratio <= 1.8 &&
-    previousCloseRatio >= 0.55 &&
-    previousCloseRatio <= 1.8 &&
-    changeRatio <= 0.2
+    ratio >= 0.35 &&  // Was 0.55, now accepts prices down to 35% of baseline
+    ratio <= 2.5 &&   // Was 1.8, now accepts prices up to 250% of baseline
+    previousCloseRatio >= 0.35 &&
+    previousCloseRatio <= 2.5 &&
+    changeRatio <= 0.3  // Was 0.2, now accepts 30% daily moves
   );
 }
 
