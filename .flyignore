@@ -1,0 +1,38 @@
+# Fly.io ignore file
+
+# Dependencies
+node_modules
+npm-debug.log
+
+# Development
+.git
+.gitignore
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Testing
+coverage
+.nyc_output
+
+# Build output (will be generated during deploy)
+.next
+
+# Database (will be mounted)
+prisma/data
+prisma/dev.db
+prisma/migrations
+
+# Logs
+logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
