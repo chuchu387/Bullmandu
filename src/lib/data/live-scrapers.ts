@@ -23,12 +23,20 @@ function normalizeNumber(raw: string | undefined) {
 
 function normalizeSymbol(raw: string) {
   const cleaned = raw.trim().toUpperCase().replace(/[^A-Z]/g, "");
+  
+  // Exact match first
   if (KNOWN_SYMBOLS.has(cleaned)) {
     return cleaned;
   }
 
-  const suffixMatch = Array.from(KNOWN_SYMBOLS).find((symbol) => cleaned.endsWith(symbol));
-  return suffixMatch ?? cleaned;
+  // Try to find exact symbol match (not suffix match to avoid ADBL matching SADBL)
+  for (const symbol of KNOWN_SYMBOLS) {
+    if (cleaned === symbol) {
+      return symbol;
+    }
+  }
+  
+  return cleaned;
 }
 
 function normalizeHeader(raw: string) {
