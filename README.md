@@ -2,6 +2,8 @@
 
 ShareAnalysis is a production-oriented NEPSE stock analysis platform built with Next.js, TypeScript, Tailwind CSS, Prisma, SQLite, and a mock-friendly market data abstraction layer.
 
+This is prototype only 
+
 This analysis is for educational and informational purposes only and should not be treated as guaranteed investment advice.
 
 ## Features
